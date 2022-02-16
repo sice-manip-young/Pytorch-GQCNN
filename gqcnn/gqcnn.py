@@ -42,7 +42,7 @@ class gqcnn (nn.Module):
             nn.Linear(in_features=1024, out_features=2),
         )
 
-        self.activate = nn.softmax()
+        self.activate = nn.Softmax(dim=1)
 
     def forward(self, y, z):
         #

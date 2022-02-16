@@ -3,8 +3,9 @@ import os
 
 import torch
 
-from utils import options, dataloader
-from gqcnn import gqcnn
+from utils.options import options
+# from utils.dataloader import dataloader
+from gqcnn.gqcnn import gqcnn
 
 if __name__=='__main__':
 
@@ -15,11 +16,10 @@ if __name__=='__main__':
     opt = options()
     print (opt)
 
-    gqcnn = gqcnn()
+    gqcnn = gqcnn(im_size=128)
+    print (gqcnn)
 
     # criterion
-
-
 
     # train
      
