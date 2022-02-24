@@ -8,26 +8,24 @@ class gqcnn (nn.Module):
         super(gqcnn, self).__init__()
 
         self.image_conv = nn.Sequential(
-            # 1 x im_size x im_size
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, padding=1), # padding is 'same'
+            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=7, padding=(7//2, 7//2)),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=(5//2, 5//2)),
             nn.ReLU(inplace=True),
             nn.LocalResponseNorm(64), 
 
             nn.MaxPool2d(2),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=(3//2, 3//2)),
             nn.ReLU(inplace=True),
 
-            # 1 x im_size/2 x im_size/2
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=(3//2, 3//2)),
             nn.ReLU(inplace=True),
             nn.LocalResponseNorm(64),
         )
 
         self.image_fc = nn.Sequential(
-            nn.Linear(in_features=im_size//2 * im_size//2 * 64, out_features=1024),  #TODO
+            nn.Linear(in_features=64 * im_size//2 * im_size//2, out_features=1024),  #TODO
             nn.ReLU(inplace=True),
         )
         
@@ -39,17 +37,17 @@ class gqcnn (nn.Module):
         self.union_models = nn.Sequential(
             nn.Linear(in_features=(1024+16), out_features=1024),
             nn.ReLU(inplace=True),
-            nn.Linear(in_features=1024, out_features=2),
+            nn.Linear(in_features=1024, out_features=1),
         )
 
         self.activate = nn.Softmax(dim=1)
 
     def forward(self, y, z):
-        #
         y = self.image_conv(y)
         y = y.view(y.size()[0], -1)
         y = self.image_fc(y)
 
+        z = z.view(z.size()[0], -1)
         z = self.z_fc(z)
 
         # concat
@@ -57,5 +55,5 @@ class gqcnn (nn.Module):
 
         output = self.union_models(output)
         q_theta = self.activate(output)
-        
-        return q_theta
+    
+        return q_theta.view(q_theta.size()[0], -1)

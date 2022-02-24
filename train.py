@@ -3,9 +3,12 @@ import os
 import time
 
 import torch
+from torchvision import datasets
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
 
 from utils.options import options
-# from utils.dataloader import dataloader
+from utils.dataloader import ImageDataset
 from gqcnn.gqcnn import gqcnn
 from utils.graphplot import plot, plot_ch
 
@@ -13,6 +16,7 @@ if __name__=='__main__':
 
     # cuda
     cuda = True if torch.cuda.is_available() else False
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # config 
     opt = options()
@@ -20,20 +24,49 @@ if __name__=='__main__':
 
     # network
     net = gqcnn(im_size=32)
-    print (gqcnn)
+    print (net)
 
     if cuda:
         net.cuda()
 
-
     # criterion (loss) and optimizer
-    loss         = torch.nn.MSELoss() # square l2 loss
+    criterion    = torch.nn.MSELoss() # square l2 loss
     optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
 
+    # data loader
+    data_transforms = {
+        'train': transforms.Compose([
+            # transforms.GaussianBlur(kernel_size=(5, 13), sigma=(0.1, 5.0)), 
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ]),
+        'val': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ]),
+    }
 
-    # --- train --- #
+    image_datasets = {
+        'train': ImageDataset(opt, s_data=0, n_data=10, transforms_=data_transforms['train']), # ID: 0~999
+        'val' : ImageDataset(opt, s_data=1000, n_data=1, transforms_=data_transforms['val']),  # ID: 1000~1100
+    }
 
+    dataloader = DataLoader(
+        image_datasets['train'],
+        batch_size=opt.batch_size,
+        shuffle=True,
+        num_workers=opt.n_cpu,
+    )
+
+    val_dataloader = DataLoader(
+        image_datasets['val'],
+        batch_size=opt.batch_size,
+        shuffle=False,
+        num_workers=1,
+    )
+
+    # --- train --- # 
     train_loss_list = []
     train_acc_list = []
     val_loss_list = []
@@ -46,38 +79,43 @@ if __name__=='__main__':
         val_loss = 0
         val_acc = 0
 
-        # train
+        # -- train
         net.train()
-        for i, (image, z) in enumerate():
+        for i, (images, z, gq) in enumerate(dataloader):
+
+            images, z, gq = images.to(device), z.to(device), gq.to(device)
+            gq = gq.view(gq.size()[0], -1)
 
             optimizer.zero_grad()
+            outputs = net (images, z)
 
+            loss = criterion (outputs, gq)
 
-            print("\rEpoch [%3d/%3d] Iter [%5d/%5d], Loss: %f, Acc: %f, Lr: %f"
+            train_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            
+            print("\rEpoch [%3d/%3d] Iter [%5d/%5d], Loss: %f"
                             % (
                     epoch+1,
                     opt.n_epochs,
                     i+1,
                     len(dataloader),
                     train_loss/float(i+1),
-                    train_acc/float((i+1)*opt.batch_size),
-                    optimizer.param_groups[0]["lr"],
                 ), end=""
             )
 
         ave_train_loss = train_loss / len(dataloader)
-        ave_train_acc = train_acc / len(dataloader.dataset)
 
+        # -- evaluate
         net.eval()
         with torch.no_grad():
-            for i, (image, z) in enumerate():
+            for i, (images, z, gq) in enumerate(val_dataloader):
                 val_loss += loss.item()
             ave_val_loss = val_loss / len(val_dataloader)    
-            ave_val_acc = val_acc / len(val_dataloader.dataset)
-        print(" - val_loss: %f, val acc: %f, time: %.2f"
+        print(" - val_loss: %f, time: %.2f"
                 % (
                     ave_val_loss,
-                    ave_val_acc,
                     (time.time() - prev_time),
                 )
         )
@@ -86,16 +124,13 @@ if __name__=='__main__':
         prev_time = time.time()
 
         train_loss_list.append(ave_train_loss)
-        train_acc_list.append(ave_train_acc)
         val_loss_list.append(ave_val_loss)
-        val_acc_list.append(ave_val_acc)
 
         torch.save(net.state_dict(), "saved_models/%s/%s_model_latest.pth" % (opt.dataset_name, opt.name))
         if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
             # Save model checkpoints
             torch.save(net.state_dict(), "saved_models/%s/%s_model_%d.pth" % (opt.dataset_name, opt.name, epoch))
 
-        # 途中経過確認用
-        plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
+        # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
 
-    plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
+    # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
