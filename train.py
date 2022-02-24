@@ -48,8 +48,8 @@ if __name__=='__main__':
     }
 
     image_datasets = {
-        'train': ImageDataset(opt, s_data=0, n_data=10, transforms_=data_transforms['train']), # ID: 0~999
-        'val' : ImageDataset(opt, s_data=1000, n_data=1, transforms_=data_transforms['val']),  # ID: 1000~1100
+        'train': ImageDataset(opt, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
+        'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_dataset//10, transforms_=data_transforms['val']),  # ID: 1000~1100
     }
 
     dataloader = DataLoader(
