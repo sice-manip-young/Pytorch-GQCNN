@@ -5,6 +5,7 @@ def options():
     parser.add_argument("--epoch", type=int, default=0, help="epoch to start training from")
     parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--n_dataset", type=int, default=1000, help="number of dataset of training")
+    parser.add_argument("--n_valid_dataset", type=int, default=10, help="number of dataset of training")
     parser.add_argument("--dataset_name", type=str, default="dex-net_2.0", help="name of the dataset")
     parser.add_argument("--batch_size", type=int, default=128, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")

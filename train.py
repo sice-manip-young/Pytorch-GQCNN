@@ -21,6 +21,8 @@ if __name__=='__main__':
     # config 
     opt = options()
     print (opt)
+    
+    os.makedirs("saved_models/%s" % (opt.dataset_name), exist_ok=True)
 
     # network
     net = gqcnn(im_size=32)
@@ -49,7 +51,7 @@ if __name__=='__main__':
 
     image_datasets = {
         'train': ImageDataset(opt, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
-        'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_dataset//10, transforms_=data_transforms['val']),  # ID: 1000~1100
+        'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
     }
 
     dataloader = DataLoader(
@@ -126,10 +128,10 @@ if __name__=='__main__':
         train_loss_list.append(ave_train_loss)
         val_loss_list.append(ave_val_loss)
 
-        torch.save(net.state_dict(), "saved_models/%s/%s_model_latest.pth" % (opt.dataset_name, opt.name))
+        torch.save(net.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
         if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
             # Save model checkpoints
-            torch.save(net.state_dict(), "saved_models/%s/%s_model_%d.pth" % (opt.dataset_name, opt.name, epoch))
+            torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
 
         # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
 
