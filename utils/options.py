@@ -8,7 +8,7 @@ def options():
     parser.add_argument("--n_valid_dataset", type=int, default=10, help="number of dataset of training")
     parser.add_argument("--dataset_name", type=str, default="dex-net_2.0", help="name of the dataset")
     parser.add_argument("--batch_size", type=int, default=128, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+    parser.add_argument("--lr", type=float, default=0.01, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--decay_epoch", type=int, default=100, help="epoch from which to start lr decay")

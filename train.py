@@ -34,14 +34,15 @@ if __name__=='__main__':
     # criterion (loss) and optimizer
     criterion    = torch.nn.MSELoss() # square l2 loss
     optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
+
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
 
     # data loader
     data_transforms = {
         'train': transforms.Compose([
-            # transforms.GaussianBlur(kernel_size=(5, 13), sigma=(0.1, 5.0)), 
             transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))
+            transforms.Normalize((0.5,), (0.5,)),
+            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 5.0)), 
         ]),
         'val': transforms.Compose([
             transforms.ToTensor(),
@@ -91,7 +92,7 @@ if __name__=='__main__':
             optimizer.zero_grad()
             outputs = net (images, z)
 
-            loss = criterion (outputs, gq)
+            loss = criterion (outputs[:,0], gq)
 
             train_loss += loss.item()
             loss.backward()

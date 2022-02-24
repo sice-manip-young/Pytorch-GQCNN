@@ -37,7 +37,7 @@ class gqcnn (nn.Module):
         self.union_models = nn.Sequential(
             nn.Linear(in_features=(1024+16), out_features=1024),
             nn.ReLU(inplace=True),
-            nn.Linear(in_features=1024, out_features=1),
+            nn.Linear(in_features=1024, out_features=2),
         )
 
         self.activate = nn.Softmax(dim=1)
@@ -52,8 +52,7 @@ class gqcnn (nn.Module):
 
         # concat
         output = torch.cat ([y, z], dim=1)
-
         output = self.union_models(output)
         q_theta = self.activate(output)
-    
+        
         return q_theta.view(q_theta.size()[0], -1)
