@@ -20,6 +20,8 @@ def options():
         "--sample_interval", type=int, default=500, help="interval between sampling of images from generators"
     )
     parser.add_argument("--checkpoint_interval", type=int, default=-1, help="interval between model checkpoints")
+
+    parser.add_argument("--gamma", type=float, default=0.002, help="gamma threshold")
     opt = parser.parse_args()
 
     return opt

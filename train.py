@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 from gqcnn.gqcnn import gqcnn
+from torch.autograd import Variable
 
 from utils.options import options
 from utils.dataloader import ImageDataset
@@ -28,6 +29,8 @@ if __name__=='__main__':
     # network
     net = gqcnn(im_size=32)
     print (net)
+    
+    gamma = opt.gamma
 
     if cuda:
         net.cuda()
@@ -88,12 +91,16 @@ if __name__=='__main__':
         for i, (images, z, gq) in enumerate(dataloader):
 
             images, z, gq = images.to(device), z.to(device), gq.to(device)
-            gq = gq.view(gq.size()[0], -1)
+
+            success = torch.tensor([[1., 0.]]*images.size()[0], device=device)
+            failure = torch.tensor([[0., 1.]]*images.size()[0], device=device)
+            grasp = torch.where(gq>gamma, success, failure)
+            grasp = grasp.view(grasp.size()[0], -1)
 
             optimizer.zero_grad()
             outputs = net (images, z)
 
-            loss = criterion (outputs[:,0], gq)
+            loss = criterion (outputs, grasp)
 
             train_loss += loss.item()
             loss.backward()
