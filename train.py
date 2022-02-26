@@ -7,9 +7,10 @@ from torchvision import datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
+from gqcnn.gqcnn import gqcnn
+
 from utils.options import options
 from utils.dataloader import ImageDataset
-from gqcnn.gqcnn import gqcnn
 from utils.graphplot import plot, plot_ch
 
 if __name__=='__main__':

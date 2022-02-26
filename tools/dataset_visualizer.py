@@ -37,18 +37,27 @@ if __name__ =='__main__':
     # lastname = basename.split('_')
     # index = lastname[-1].split('.') [0]
 
-    for i in tqdm(range(10)):
+    for i in tqdm(range(1)):
         index = str(i).zfill(5)
         path_depth  = os.path.join('data', opt.dataset_name, 'tensors', 'depth_ims_tf_table_'+str(index)+'.npz')
         path_hand_poses   = os.path.join('data', opt.dataset_name, 'tensors', 'hand_poses_'+str(index)+'.npz')
         path_metric = os.path.join('data', opt.dataset_name, 'tensors', 'robust_ferrari_canny_'+str(index)+'.npz') 
 
-        depth_im = np.load(path_depth)
-        hand_poses = np.load(path_hand_poses)
-        grasp_metric = np.load(path_metric)
+        depth_im_set = np.load(path_depth)
+        hand_poses_set = np.load(path_hand_poses)
+        grasp_metric_set = np.load(path_metric)
 
         # print ('depth: ', depth_im['arr_0'][478,...])
         # print ('hand_poses: ', hand_poses['arr_0'][478,...])
         # print ('grasp_metric: ', grasp_metric['arr_0'][478,...])
-        
-        plt.imsave('./tools/images/depth_%s.png' % (index), depth_im['arr_0'][0,:,:,0], cmap='gray')
+        # plt.imsave('./tools/images/depth_%s.png' % (index), depth_im['arr_0'][0,:,:,0], cmap='gray')
+
+        n_data_points = depth_im_set['arr_0'].shape[0]
+        for j in range(n_data_points):
+            depth = depth_im_set['arr_0'][j,...]
+            hand_pose = hand_poses_set['arr_0'][j,...]
+            grasp_metric = grasp_metric_set['arr_0'][j,...]
+
+            # print (depth)
+            print ('hand:', hand_pose[2])
+            print ('grasp_metric: ', grasp_metric)
