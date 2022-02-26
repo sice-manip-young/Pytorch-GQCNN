@@ -94,6 +94,8 @@ if __name__=='__main__':
 
             success = torch.tensor([[1., 0.]]*images.size()[0], device=device)
             failure = torch.tensor([[0., 1.]]*images.size()[0], device=device)
+
+            gq = gq.view(gq.size()[0], -1)
             grasp = torch.where(gq>gamma, success, failure)
             grasp = grasp.view(grasp.size()[0], -1)
 
