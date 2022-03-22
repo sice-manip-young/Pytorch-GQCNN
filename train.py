@@ -1,14 +1,11 @@
-import argparse
 import os
 import time
 
 import torch
-from torchvision import datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from gqcnn.gqcnn import gqcnn
-from torch.autograd import Variable
+from gqcnn.gqcnn import gqcnn, weights_init_normal
 
 from utils.options import options
 from utils.dataloader import ImageDataset
@@ -28,7 +25,10 @@ if __name__=='__main__':
 
     # network
     net = gqcnn(im_size=32)
-    print (net)
+    if opt.epoch != 0:
+        net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.dataset_name, opt.epoch)))
+    else:
+        net.apply(weights_init_normal)
     
     gamma = opt.gamma
 
@@ -36,7 +36,7 @@ if __name__=='__main__':
         net.cuda()
 
     # criterion (loss) and optimizer
-    criterion    = torch.nn.MSELoss() # square l2 loss
+    criterion    = torch.nn.CrossEntropyLoss()
     optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
@@ -92,13 +92,10 @@ if __name__=='__main__':
 
             images, z, gq = images.to(device), z.to(device), gq.to(device)
 
-            success = torch.tensor([[1., 0.]]*images.size()[0], device=device)
-            failure = torch.tensor([[0., 1.]]*images.size()[0], device=device)
-
             gq = gq.view(gq.size()[0], -1)
-            grasp = torch.where(gq>gamma, success, failure)
-            grasp = grasp.view(grasp.size()[0], -1)
-
+            grasp = torch.where(gq>gamma, 0, 1)
+            grasp = grasp.squeeze_()
+            
             optimizer.zero_grad()
             outputs = net (images, z)
 
