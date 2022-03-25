@@ -8,71 +8,10 @@ from torch.utils.data import DataLoader
 from gqcnn.gqcnn import gqcnn, weights_init_normal
 
 from utils.options import options
-from utils.dataloader import ImageDataset
+from utils.dataloader import ImageDataset, load_dexnet2
 from utils.graphplot import plot, plot_ch
 
-if __name__=='__main__':
-
-    # cuda
-    cuda = True if torch.cuda.is_available() else False
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    # config 
-    opt = options()
-    print (opt)
-    
-    os.makedirs("saved_models/%s" % (opt.dataset_name), exist_ok=True)
-
-    # network
-    net = gqcnn(im_size=32)
-    if opt.epoch != 0:
-        net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.dataset_name, opt.epoch)))
-    else:
-        net.apply(weights_init_normal)
-    
-    gamma = opt.gamma
-
-    if cuda:
-        net.cuda()
-
-    # criterion (loss) and optimizer
-    criterion    = torch.nn.CrossEntropyLoss()
-    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
-
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
-
-    # data loader
-    data_transforms = {
-        'train': transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 5.0)), 
-        ]),
-        'val': transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))
-        ]),
-    }
-
-    image_datasets = {
-        'train': ImageDataset(opt, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
-        'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
-    }
-
-    dataloader = DataLoader(
-        image_datasets['train'],
-        batch_size=opt.batch_size,
-        shuffle=True,
-        num_workers=opt.n_cpu,
-    )
-
-    val_dataloader = DataLoader(
-        image_datasets['val'],
-        batch_size=opt.batch_size,
-        shuffle=False,
-        num_workers=1,
-    )
-
+def train_process(opt, net, dataloader, val_dataloader):
     # --- train --- # 
     train_loss_list = []
     train_acc_list = []
@@ -143,3 +82,77 @@ if __name__=='__main__':
         # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
 
     # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
+
+if __name__=='__main__':
+
+    # cuda
+    cuda = True if torch.cuda.is_available() else False
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # config 
+    opt = options()
+    print (opt)
+    
+    os.makedirs("saved_models/%s" % (opt.dataset_name), exist_ok=True)
+
+    # network
+    net = gqcnn(im_size=32)
+    net = torch.nn.DataParallel(net, device_ids=[0, 1]) # multi-gpu
+    if opt.epoch != 0:
+        net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.dataset_name, opt.epoch)))
+    else:
+        net.apply(weights_init_normal)
+    
+    gamma = opt.gamma
+
+    if cuda:
+        net.cuda()
+
+    # criterion (loss) and optimizer
+    criterion    = torch.nn.CrossEntropyLoss()
+    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
+
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
+
+    # data loader
+    data_transforms = {
+        'train': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,)),
+            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 5.0)), 
+        ]),
+        'val': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ]),
+    }
+
+    images, depth ,gquality = load_dexnet2(opt, s_data=0, n_data=opt.n_dataset)
+    images_valid, depth_valid , gquality_valid = load_dexnet2(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset)
+
+    image_datasets = {
+         'train': ImageDataset(opt, images, depth ,gquality, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
+         'val' : ImageDataset(opt, images_valid, depth_valid ,gquality_valid, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
+    }
+
+    # image_datasets = {
+    #     'train': ImageDataset(opt, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
+    #     'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
+    # }
+
+    dataloader = DataLoader(
+        image_datasets['train'],
+        batch_size=opt.batch_size,
+        shuffle=True,
+        pin_memory=True, 
+        num_workers=opt.n_cpu,
+    )
+
+    val_dataloader = DataLoader(
+        image_datasets['val'],
+        batch_size=opt.batch_size,
+        shuffle=False,
+        num_workers=1,
+    )
+
+    train_process (opt, net, dataloader, val_dataloader)
