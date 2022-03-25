@@ -94,11 +94,10 @@ if __name__=='__main__':
 
             gq = gq.view(gq.size()[0], -1)
             grasp = torch.where(gq>gamma, 0, 1)
-            grasp = grasp.squeeze_()
+            grasp = torch.squeeze(grasp, dim=1)
             
             optimizer.zero_grad()
             outputs = net (images, z)
-
             loss = criterion (outputs, grasp)
 
             train_loss += loss.item()
