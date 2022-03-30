@@ -11,78 +11,6 @@ from utils.options import options
 from utils.dataloader import ImageDataset, load_dexnet2
 from utils.graphplot import plot, plot_ch
 
-def train_process(opt, net, dataloader, val_dataloader):
-    # --- train --- # 
-    train_loss_list = []
-    train_acc_list = []
-    val_loss_list = []
-    val_acc_list = []
-
-    prev_time = time.time()
-    for epoch in range(opt.epoch, opt.n_epochs):
-        train_loss = 0
-        train_acc = 0
-        val_loss = 0
-        val_acc = 0
-
-        # -- train
-        net.train()
-        for i, (images, z, gq) in enumerate(dataloader):
-
-            images, z, gq = images.to(device), z.to(device), gq.to(device)
-
-            gq = gq.view(gq.size()[0], -1)
-            grasp = torch.where(gq>gamma, 0, 1)
-            grasp = torch.squeeze(grasp, dim=1)
-            
-            optimizer.zero_grad()
-            outputs = net (images, z)
-            loss = criterion (outputs, grasp)
-
-            train_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            
-            print("\rEpoch [%3d/%3d] Iter [%5d/%5d], Loss: %f"
-                            % (
-                    epoch+1,
-                    opt.n_epochs,
-                    i+1,
-                    len(dataloader),
-                    train_loss/float(i+1),
-                ), end=""
-            )
-
-        ave_train_loss = train_loss / len(dataloader)
-
-        # -- evaluate
-        net.eval()
-        with torch.no_grad():
-            for i, (images, z, gq) in enumerate(val_dataloader):
-                val_loss += loss.item()
-            ave_val_loss = val_loss / len(val_dataloader)    
-        print(" - val_loss: %f, time: %.2f"
-                % (
-                    ave_val_loss,
-                    (time.time() - prev_time),
-                )
-        )
-
-        lr_scheduler.step()
-        prev_time = time.time()
-
-        train_loss_list.append(ave_train_loss)
-        val_loss_list.append(ave_val_loss)
-
-        torch.save(net.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
-        if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
-            # Save model checkpoints
-            torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
-
-        # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
-
-    # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
-
 if __name__=='__main__':
 
     # cuda
@@ -110,7 +38,8 @@ if __name__=='__main__':
 
     # criterion (loss) and optimizer
     criterion    = torch.nn.CrossEntropyLoss()
-    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-04)
+    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9)
+    # optimizer    = torch.optim.Adam(net.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2)) # weight_decay=5e-04
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
 
@@ -119,7 +48,7 @@ if __name__=='__main__':
         'train': transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
-            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 5.0)), 
+            transforms.GaussianBlur(kernel_size=(5,5), sigma=(0.001, 0.005) ), 
         ]),
         'val': transforms.Compose([
             transforms.ToTensor(),
@@ -146,6 +75,7 @@ if __name__=='__main__':
         shuffle=True,
         pin_memory=True, 
         num_workers=opt.n_cpu,
+        drop_last=True
     )
 
     val_dataloader = DataLoader(
@@ -153,6 +83,89 @@ if __name__=='__main__':
         batch_size=opt.batch_size,
         shuffle=False,
         num_workers=1,
+        drop_last=True
     )
 
-    train_process (opt, net, dataloader, val_dataloader)
+    # --- train --- # 
+    train_loss_list = []
+    train_acc_list = []
+    val_loss_list = []
+    val_acc_list = []
+
+    prev_time = time.time()
+    for epoch in range(opt.epoch, opt.n_epochs):
+        train_loss = 0
+        train_acc = 0
+        val_loss = 0
+        val_acc = 0
+        epoch_corrects = 0
+
+        # -- train
+        net.train()
+        for i, (images, z, gq) in enumerate(dataloader):
+            images, z, gq = images.to(device), z.to(device), gq.to(device)
+
+            optimizer.zero_grad()
+
+            gq = gq.view(gq.size()[0], -1)
+            grasp = torch.where(gq>gamma, 1, 0)
+            grasp = torch.squeeze(grasp, dim=1)
+            
+            outputs = net (images, z)
+
+            # print ('出力:', torch.nn.Softmax(dim=1)(outputs),'正解:', grasp)
+            loss = criterion (outputs, grasp)
+
+            epoch_corrects += torch.sum(grasp == torch.max(outputs, 1)[1])
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            
+            print("\rEpoch [%3d/%3d] Iter [%5d/%5d], Loss: %f, Acc: %f"
+                            % (
+                    epoch+1,
+                    opt.n_epochs,
+                    i+1,
+                    opt.n_iterations, 
+                    train_loss/float(i+1),
+                    float(epoch_corrects)/(float(i+1)*opt.batch_size)
+                ), end=""
+            )
+
+            if i > opt.n_iterations:
+                break
+
+        ave_train_loss = train_loss / len(dataloader)
+
+        # -- evaluate
+        net.eval()
+        with torch.no_grad():
+            for i, (images, z, gq) in enumerate(val_dataloader):
+                val_loss += loss.item()
+                if i > opt.n_iterations//10:
+                    break
+            ave_val_loss = val_loss / float(i+1) # len(val_dataloader)
+
+        print(" - val_loss: %f, time: %.2f"
+                % (
+                    ave_val_loss,
+                    (time.time() - prev_time),
+                )
+        )
+
+        lr_scheduler.step()
+        prev_time = time.time()
+
+        train_loss_list.append(ave_train_loss)
+        val_loss_list.append(ave_val_loss)
+
+        torch.save(net.module.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+        if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
+            # Save model checkpoints
+            torch.save(net.module.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
+
+        # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
+
+    # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)

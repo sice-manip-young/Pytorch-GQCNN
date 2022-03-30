@@ -32,7 +32,7 @@ class ImageDataset(Dataset):
         self.images   = images
         self.depth    = depth
         self.gquality = gquality
-
+    
     def __getitem__(self, index):
 
         img_group_id = int(index//1000)
