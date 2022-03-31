@@ -1,4 +1,3 @@
-from email.policy import strict
 import os
 
 import torch
@@ -9,8 +8,6 @@ from utils.options import options
 from utils.dataloader import load_dexnet2, ImageDataset
 
 from gqcnn.gqcnn import gqcnn
-
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 if __name__=='__main__':
@@ -56,6 +53,11 @@ if __name__=='__main__':
     # save the result on the text file
     f = open('sample_demo/%s/result.csv' % (opt.dataset_name), 'w')
 
+    TN=0
+    TP=0
+    FN=0
+    FP=0
+
     data_corrects = 0
     net.eval()
     for i, (images, z, gq) in enumerate(dataloader):
@@ -81,13 +83,34 @@ if __name__=='__main__':
         data_corrects += torch.sum(correct)
 
         prob = torch.nn.Softmax(dim=1)(outputs)
-        print ('Id: %d, prob: %.5f, GQ: %.5f, T/F: %s'% (i, prob[0,1].item(), gq.item(), correct.item()))
+        print ('Id: %d, prob: %.5f [%s], T/F: %s'% (i, prob[0,1].item(), gq.item()>opt.gamma, correct.item()))
         f.write('%d, %.8f, %.8f, %s\n'% (i, prob[0,1].item(), gq.item(), correct.item()))
-        
 
+        # 真陽性
+        if gq.item()>opt.gamma and correct.item()==True:
+            TP += 1
+        # 真陰性
+        if gq.item()<opt.gamma and correct.item()==True:
+            TN += 1
+        # 偽陽性
+        if gq.item()>opt.gamma and correct.item()==False:
+            FP += 1
+        if gq.item()<opt.gamma and correct.item()==False:
+            FN += 1
+        # 偽陰性
         if i >= opt.n_sample-1:
             break
 
     f.close()
 
-    print ('Accuracy:', ((data_corrects/opt.n_sample).item() * 100), '[%]')
+    accuracy  = (TP+TN)/(TP+FP+FN+TN)
+    precision = TP/(TP+FP)
+    recall    =  TP/(TP+FN)
+    f_measure = 2*precision*recall/(precision+recall)
+
+    print ('Correct rate:', ((data_corrects/opt.n_sample).item() * 100), '[%]')
+    print ('TP: %d, TN: %d, FP: %d, FN: %d' % (TP, TN, FP, FN))
+    print ('- Accuracy: %.5f' % accuracy )
+    print ('- Precision: %.5f' % precision)
+    print ('- Recall: %.5f' % recall)
+    print ('- F-measure: %.5f' % f_measure)
