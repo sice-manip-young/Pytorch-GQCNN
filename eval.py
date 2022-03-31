@@ -5,11 +5,9 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 from utils.options import options
-from utils.dataloader import ImageDatasetEval
+from utils.dataloader import load_dexnet2, ImageDataset
 
 from gqcnn.gqcnn import gqcnn
-
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 if __name__=='__main__':
@@ -23,47 +21,96 @@ if __name__=='__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     os.makedirs("sample_demo/%s" % (opt.dataset_name), exist_ok=True)
-
     net = gqcnn(im_size=32)
-    # print (net)
 
     # data loader
-    data_transform = transforms.Compose([
+    data_transforms = {
+        'train': transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
-    ])
+            transforms.GaussianBlur(kernel_size=(5,5), sigma=(0.001, 0.005) ), 
+        ]),
+        'val': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ]),
+    }
 
-    # image_dataset = ImageDatasetEval(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transform)
-    image_dataset = ImageDatasetEval(opt, s_data=5000, n_data=1, transforms_=data_transform)
+    images_valid, depth_valid , gquality_valid = load_dexnet2(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset)
+    image_dataset = ImageDataset(images_valid, depth_valid , gquality_valid, transforms_=data_transforms['val'])
     
     dataloader = DataLoader(
         image_dataset,
         batch_size=1,
-        shuffle=False,
+        shuffle=True,
         num_workers=1,
     )
 
     path_model = "saved_models/%s/model_latest.pth" % (opt.dataset_name)
-    net.load_state_dict(torch.load(path_model))
+    net.load_state_dict(torch.load(path_model), strict=False)
     print ('load {}'.format(path_model))
+    
+    # save the result on the text file
+    f = open('sample_demo/%s/result.csv' % (opt.dataset_name), 'w')
 
+    TN=0
+    TP=0
+    FN=0
+    FP=0
 
+    data_corrects = 0
     net.eval()
-    with torch.no_grad():
-        for i, (images, z, gq, poses) in enumerate(dataloader):
-            outputs = net (images, z)
+    for i, (images, z, gq) in enumerate(dataloader):
+        gq = gq.view(gq.size()[0], -1)
+        grasp = torch.where(gq>opt.gamma, 1, 0)
+        grasp = torch.squeeze(grasp, dim=1)
 
+        outputs = net (images, z)
+
+        if opt.save_image_eval:
             result = images[0,0].numpy()
             fig = plt.figure()
             plt.imshow(result); 
             plt.axis('off'); 
-            plt.tight_layout()
-            
+            plt.tight_layout()    
             fig.savefig('sample_demo/%s/%s' % (opt.dataset_name, str(i)))
-            #fig.savefig('sample_demo/%s/%s_%s_%s_%s' % (opt.dataset_name, str(i), z.item(), gq.item(), outputs.item()))
+            # release memory
+            plt.clf()
+            plt.close()
 
-            # print ('depth: ', z.item(), 'hand_poses: ', poses[0].numpy(), 'grasp_metric: ', gq.item(), )
-            print (z.item(), gq.item(), outputs[0,0].numpy())
+        correct = (grasp == torch.max(outputs, 1)[1])
 
-            if i > 10:
-                break
+        data_corrects += torch.sum(correct)
+
+        prob = torch.nn.Softmax(dim=1)(outputs)
+        print ('Id: %d, prob: %.5f [%s], T/F: %s'% (i, prob[0,1].item(), gq.item()>opt.gamma, correct.item()))
+        f.write('%d, %.8f, %.8f, %s\n'% (i, prob[0,1].item(), gq.item(), correct.item()))
+
+        # 真陽性
+        if gq.item()>opt.gamma and correct.item()==True:
+            TP += 1
+        # 真陰性
+        if gq.item()<opt.gamma and correct.item()==True:
+            TN += 1
+        # 偽陽性
+        if gq.item()>opt.gamma and correct.item()==False:
+            FP += 1
+        if gq.item()<opt.gamma and correct.item()==False:
+            FN += 1
+        # 偽陰性
+        if i >= opt.n_sample-1:
+            break
+
+    f.close()
+
+    accuracy  = (TP+TN)/(TP+FP+FN+TN)
+    precision = TP/(TP+FP)
+    recall    =  TP/(TP+FN)
+    f_measure = 2*precision*recall/(precision+recall)
+
+    print ('Correct rate:', ((data_corrects/opt.n_sample).item() * 100), '[%]')
+    print ('TP: %d, TN: %d, FP: %d, FN: %d' % (TP, TN, FP, FN))
+    print ('- Accuracy: %.5f' % accuracy )
+    print ('- Precision: %.5f' % precision)
+    print ('- Recall: %.5f' % recall)
+    print ('- F-measure: %.5f' % f_measure)
