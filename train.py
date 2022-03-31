@@ -25,7 +25,10 @@ if __name__=='__main__':
 
     # network
     net = gqcnn(im_size=32)
-    net = torch.nn.DataParallel(net, device_ids=[0, 1]) # multi-gpu
+    
+    if opt.dual_gpu:
+        net = torch.nn.DataParallel(net, device_ids=[0, 1]) # multi-gpu
+
     if opt.epoch != 0:
         net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.dataset_name, opt.epoch)))
     else:
@@ -38,9 +41,7 @@ if __name__=='__main__':
 
     # criterion (loss) and optimizer
     criterion    = torch.nn.CrossEntropyLoss()
-    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9)
-    # optimizer    = torch.optim.Adam(net.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2)) # weight_decay=5e-04
-
+    optimizer    = torch.optim.SGD(net.parameters(), lr=opt.lr, momentum=opt.momentum) # removed weight_decay=5e-04
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.95)
 
     # data loader
@@ -56,6 +57,7 @@ if __name__=='__main__':
         ]),
     }
 
+    # load from dexnet-2.0
     images, depth ,gquality = load_dexnet2(opt, s_data=0, n_data=opt.n_dataset)
     images_valid, depth_valid , gquality_valid = load_dexnet2(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset)
 
@@ -63,11 +65,6 @@ if __name__=='__main__':
          'train': ImageDataset(opt, images, depth ,gquality, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
          'val' : ImageDataset(opt, images_valid, depth_valid ,gquality_valid, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
     }
-
-    # image_datasets = {
-    #     'train': ImageDataset(opt, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
-    #     'val' : ImageDataset(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
-    # }
 
     dataloader = DataLoader(
         image_datasets['train'],
@@ -95,9 +92,7 @@ if __name__=='__main__':
     prev_time = time.time()
     for epoch in range(opt.epoch, opt.n_epochs):
         train_loss = 0
-        train_acc = 0
         val_loss = 0
-        val_acc = 0
         epoch_corrects = 0
 
         # -- train
@@ -113,9 +108,7 @@ if __name__=='__main__':
             
             outputs = net (images, z)
 
-            # print ('出力:', torch.nn.Softmax(dim=1)(outputs),'正解:', grasp)
             loss = criterion (outputs, grasp)
-
             epoch_corrects += torch.sum(grasp == torch.max(outputs, 1)[1])
 
             loss.backward()
@@ -134,19 +127,31 @@ if __name__=='__main__':
                 ), end=""
             )
 
-            if i > opt.n_iterations:
+            if i >= opt.n_iterations-1:
                 break
 
         ave_train_loss = train_loss / len(dataloader)
+        ave_train_acc  = float(epoch_corrects)/float(opt.n_iterations*opt.batch_size)
 
         # -- evaluate
         net.eval()
         with torch.no_grad():
+            epoch_corrects = 0
             for i, (images, z, gq) in enumerate(val_dataloader):
+                gq = gq.view(gq.size()[0], -1)
+                grasp = torch.where(gq>gamma, 1, 0)
+                grasp = torch.squeeze(grasp, dim=1)
+
+                outputs = net (images, z)
+                loss = criterion (outputs, grasp)
+
                 val_loss += loss.item()
+                epoch_corrects += torch.sum(grasp == torch.max(outputs, 1)[1])
+
                 if i > opt.n_iterations//10:
                     break
-            ave_val_loss = val_loss / float(i+1) # len(val_dataloader)
+            ave_val_loss = val_loss / len(val_dataloader)
+            ave_val_acc  = epoch_corrects/len(val_dataloader)
 
         print(" - val_loss: %f, time: %.2f"
                 % (
@@ -160,12 +165,20 @@ if __name__=='__main__':
 
         train_loss_list.append(ave_train_loss)
         val_loss_list.append(ave_val_loss)
+        train_acc_list.append(ave_train_acc)
+        val_acc_list.append(ave_val_acc)
 
-        torch.save(net.module.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+        if opt.dual_gpu:
+            torch.save(net.module.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+        else:
+            torch.save(net.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+
+        # Save model checkpoints
         if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
-            # Save model checkpoints
-            torch.save(net.module.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
+            if opt.dual_gpu:
+                torch.save(net.module.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
+            else:
+                torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
 
         # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
-
     # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
