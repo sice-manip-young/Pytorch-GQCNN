@@ -20,7 +20,7 @@ if __name__=='__main__':
     cuda = True if torch.cuda.is_available() else False
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    os.makedirs("sample_demo/%s" % (opt.dataset_name), exist_ok=True)
+    os.makedirs("sample_demo/%s" % (opt.name), exist_ok=True)
     net = gqcnn(im_size=32)
 
     # data loader
@@ -46,12 +46,12 @@ if __name__=='__main__':
         num_workers=1,
     )
 
-    path_model = "saved_models/%s/model_latest.pth" % (opt.dataset_name)
+    path_model = "saved_models/%s/model_latest.pth" % (opt.name)
     net.load_state_dict(torch.load(path_model), strict=False)
     print ('load {}'.format(path_model))
     
     # save the result on the text file
-    f = open('sample_demo/%s/result.csv' % (opt.dataset_name), 'w')
+    f = open('sample_demo/%s/result.csv' % (opt.name), 'w')
 
     TN=0
     TP=0
@@ -73,7 +73,7 @@ if __name__=='__main__':
             plt.imshow(result); 
             plt.axis('off'); 
             plt.tight_layout()    
-            fig.savefig('sample_demo/%s/%s' % (opt.dataset_name, str(i)))
+            fig.savefig('sample_demo/%s/%s' % (opt.name, str(i)))
             # release memory
             plt.clf()
             plt.close()

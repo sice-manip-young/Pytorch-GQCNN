@@ -5,7 +5,7 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from gqcnn.gqcnn import gqcnn, weights_init_normal
+from gqcnn.gqcnn import gqcnn, gqcnn_with_attention, weights_init_normal
 
 from utils.options import options
 from utils.dataloader import ImageDataset, load_dexnet2
@@ -21,16 +21,19 @@ if __name__=='__main__':
     opt = options()
     print (opt)
     
-    os.makedirs("saved_models/%s" % (opt.dataset_name), exist_ok=True)
+    os.makedirs("saved_models/%s" % (opt.name), exist_ok=True)
 
     # network
-    net = gqcnn(im_size=32)
+    if opt.attention:
+        net = gqcnn_with_attention(im_size=32)
+    else:
+        net = gqcnn(im_size=32)
     
     if opt.dual_gpu:
         net = torch.nn.DataParallel(net, device_ids=[0, 1]) # multi-gpu
 
     if opt.epoch != 0:
-        net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.dataset_name, opt.epoch)))
+        net.load_state_dict(torch.load('saved_models/%s/model_%d.pth' % (opt.name, opt.epoch)))
     else:
         net.apply(weights_init_normal)
     
@@ -62,8 +65,8 @@ if __name__=='__main__':
     images_valid, depth_valid , gquality_valid = load_dexnet2(opt, s_data=opt.n_dataset, n_data=opt.n_valid_dataset)
 
     image_datasets = {
-         'train': ImageDataset(opt, images, depth ,gquality, s_data=0, n_data=opt.n_dataset, transforms_=data_transforms['train']), # ID: 0~999
-         'val' : ImageDataset(opt, images_valid, depth_valid ,gquality_valid, s_data=opt.n_dataset, n_data=opt.n_valid_dataset, transforms_=data_transforms['val']),  # ID: 1000~1100
+         'train': ImageDataset(images, depth, gquality, transforms_=data_transforms['train']), # ID: 0~999
+         'val' : ImageDataset(images_valid, depth_valid, gquality_valid, transforms_=data_transforms['val']),  # ID: 1000~1100
     }
 
     dataloader = DataLoader(
@@ -138,6 +141,7 @@ if __name__=='__main__':
         with torch.no_grad():
             epoch_corrects = 0
             for i, (images, z, gq) in enumerate(val_dataloader):
+                images, z, gq = images.to(device), z.to(device), gq.to(device)
                 gq = gq.view(gq.size()[0], -1)
                 grasp = torch.where(gq>gamma, 1, 0)
                 grasp = torch.squeeze(grasp, dim=1)
@@ -160,6 +164,9 @@ if __name__=='__main__':
                 )
         )
 
+        if opt.attention:
+            net.save_attention_mask(images, z, './saved_models/%s/attn_%d.png' % (opt.name, epoch))
+
         lr_scheduler.step()
         prev_time = time.time()
 
@@ -169,16 +176,16 @@ if __name__=='__main__':
         val_acc_list.append(ave_val_acc)
 
         if opt.dual_gpu:
-            torch.save(net.module.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+            torch.save(net.module.state_dict(), "saved_models/%s/model_latest.pth" % (opt.name))
         else:
-            torch.save(net.state_dict(), "saved_models/%s/model_latest.pth" % (opt.dataset_name))
+            torch.save(net.state_dict(), "saved_models/%s/model_latest.pth" % (opt.name))
 
         # Save model checkpoints
         if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
             if opt.dual_gpu:
-                torch.save(net.module.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
+                torch.save(net.module.state_dict(), "saved_models/%s/model_%d.pth" % (opt.name, epoch))
             else:
-                torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.dataset_name, epoch))
+                torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.name, epoch))
 
         # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
     # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
