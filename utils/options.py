@@ -8,6 +8,7 @@ def options():
     parser.add_argument("--n_valid_dataset", type=int, default=500, help="number of dataset of training")
     parser.add_argument("--n_iterations", type=int, default=3000, help="number of iterations")
     parser.add_argument("--dataset_name", type=str, default="dex-net_2.0", help="name of the dataset")
+    parser.add_argument("--name", type=str, default="test", help="name of the project")
     parser.add_argument("--batch_size", type=int, default=128, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.01, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
@@ -25,6 +26,8 @@ def options():
     parser.add_argument("--checkpoint_interval", type=int, default=-1, help="interval between model checkpoints")
 
     parser.add_argument("--dual_gpu", action='store_true', help="use two GPUs (SLI)")
+
+    parser.add_argument("--attention", action='store_true', help="use the ABN")
 
     # evaluation
     parser.add_argument("--save_image_eval", action='store_true', help="save the images of the reusult when evaluating")
