@@ -40,7 +40,7 @@ def plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, i
     plt.grid()
     
     if is_check:
-        fig.savefig('prog_plot_loss.png')
+        fig.savefig('prog_loss_%s.png' % opt.name)
 
     plt.close()
 
@@ -54,6 +54,6 @@ def plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, i
     plt.grid()
 
     if is_check:
-        fig.savefig('prog_plot_acc.png')
+        fig.savefig('prog_acc_%s.png' % opt.name)
 
     plt.close()

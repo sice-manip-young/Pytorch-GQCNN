@@ -28,6 +28,7 @@ if __name__=='__main__':
         net = gqcnn_with_attention(im_size=32)
     else:
         net = gqcnn(im_size=32)
+    print ('Summary: ', net)
     
     if opt.dual_gpu:
         net = torch.nn.DataParallel(net, device_ids=[0, 1]) # multi-gpu
@@ -133,7 +134,7 @@ if __name__=='__main__':
             if i >= opt.n_iterations-1:
                 break
 
-        ave_train_loss = train_loss / len(dataloader)
+        ave_train_loss = train_loss / opt.n_iterations * opt.batch_size
         ave_train_acc  = float(epoch_corrects)/float(opt.n_iterations*opt.batch_size)
 
         # -- evaluate
@@ -154,8 +155,8 @@ if __name__=='__main__':
 
                 if i > opt.n_iterations//10:
                     break
-            ave_val_loss = val_loss / len(val_dataloader)
-            ave_val_acc  = epoch_corrects/len(val_dataloader)
+            ave_val_loss = val_loss / (opt.n_iterations//10)
+            ave_val_acc  = epoch_corrects / (opt.n_iterations//10)
 
         print(" - val_loss: %f, time: %.2f"
                 % (
@@ -164,8 +165,8 @@ if __name__=='__main__':
                 )
         )
 
-        if opt.attention:
-            net.save_attention_mask(images, z, './saved_models/%s/attn_%d.png' % (opt.name, epoch))
+        #if opt.attention:
+        #    net.save_attention_mask(images, z, './saved_models/%s/attn_%d.png' % (opt.name, epoch))
 
         lr_scheduler.step()
         prev_time = time.time()
@@ -187,5 +188,5 @@ if __name__=='__main__':
             else:
                 torch.save(net.state_dict(), "saved_models/%s/model_%d.pth" % (opt.name, epoch))
 
-        # plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
-    # plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)
+        plot_ch(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_check=True)
+    plot(opt, train_loss_list, train_acc_list, val_loss_list, val_acc_list, is_save=True)

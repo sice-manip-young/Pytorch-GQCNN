@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from utils.options import options
 from utils.dataloader import load_dexnet2, ImageDataset
 
-from gqcnn.gqcnn import gqcnn
+from gqcnn.gqcnn import gqcnn, gqcnn_with_attention
 import matplotlib.pyplot as plt
 
 if __name__=='__main__':
@@ -21,7 +21,14 @@ if __name__=='__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     os.makedirs("sample_demo/%s" % (opt.name), exist_ok=True)
-    net = gqcnn(im_size=32)
+
+    # network
+    if opt.attention:
+        net = gqcnn_with_attention(im_size=32)
+    else:
+        net = gqcnn(im_size=32)
+
+    print ('Evaluate the project %s' % opt.name)
 
     # data loader
     data_transforms = {
@@ -73,13 +80,17 @@ if __name__=='__main__':
             plt.imshow(result); 
             plt.axis('off'); 
             plt.tight_layout()    
-            fig.savefig('sample_demo/%s/%s' % (opt.name, str(i)))
+            # fig.savefig('sample_demo/%s/%s' % (opt.name, str(i)))
             # release memory
             plt.clf()
             plt.close()
 
-        correct = (grasp == torch.max(outputs, 1)[1])
+            if opt.attention:
+                net.save_attention_mask(images, z, './sample_demo/%s/attn_%d.png' % (opt.name, i))
 
+
+        correct = (grasp == torch.max(outputs, 1)[1])
+ 
         data_corrects += torch.sum(correct)
 
         prob = torch.nn.Softmax(dim=1)(outputs)
@@ -103,13 +114,13 @@ if __name__=='__main__':
 
     f.close()
 
+    print ('Correct rate:', ((data_corrects/opt.n_sample).item() * 100), '[%]')
+    print ('TP: %d, TN: %d, FP: %d, FN: %d' % (TP, TN, FP, FN))
+
     accuracy  = (TP+TN)/(TP+FP+FN+TN)
     precision = TP/(TP+FP)
     recall    =  TP/(TP+FN)
     f_measure = 2*precision*recall/(precision+recall)
-
-    print ('Correct rate:', ((data_corrects/opt.n_sample).item() * 100), '[%]')
-    print ('TP: %d, TN: %d, FP: %d, FN: %d' % (TP, TN, FP, FN))
     print ('- Accuracy: %.5f' % accuracy )
     print ('- Precision: %.5f' % precision)
     print ('- Recall: %.5f' % recall)

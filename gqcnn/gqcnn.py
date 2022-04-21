@@ -67,6 +67,7 @@ class gqcnn (nn.Module):
 class gqcnn_with_attention(nn.Module):
     def __init__(self, im_size):
         super(gqcnn_with_attention, self).__init__()
+        self.im_size = im_size
 
         self.image_conv = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=64, kernel_size=7, stride=1, padding=(7//2, 7//2), padding_mode='reflect'),
@@ -87,7 +88,7 @@ class gqcnn_with_attention(nn.Module):
         )
 
         self.image_fc = nn.Sequential(
-            nn.Linear(in_features=64,  out_features=1024),  #TODO
+            nn.Linear(in_features=64 * im_size//2 * im_size//2,  out_features=1024),  #TODO
             nn.LeakyReLU(negative_slope=0.2),
         )
 
@@ -117,7 +118,7 @@ class gqcnn_with_attention(nn.Module):
         self.mask = attn.detach().cpu() # save the attention mask 
 
         y = y * attn
-        y = torch.nn.functional.adaptive_avg_pool2d(y, (1,1))
+        y = torch.nn.functional.adaptive_avg_pool2d(y, (self.im_size//2,self.im_size//2)) # 不要？
         y = torch.flatten(y, 1)
         y = self.image_fc(y)
 
@@ -134,12 +135,12 @@ class gqcnn_with_attention(nn.Module):
         batch_size = y.shape[0]
         self.forward(y, z)
 
-        y = y.cpu()
-
+        # y = y.cpu()
         _, axs = plt.subplots(1,2, figsize=(6,3))
         # plt.axis('off')
-        axs[0].imshow(y[0].permute(1,2,0), vmin=0., vmax=1.)
-        axs[1].imshow(self.mask[0][0], cmap='viridis', vmin=0., vmax=1.)
+        axs[0].imshow(y[0,0].numpy(), cmap='binary')
+        axs[1].imshow(self.mask[0][0])
+        # print (self.mask[0][0])
         plt.savefig(dir)
         plt.close()
         return 
